@@ -1,0 +1,32 @@
+{
+    "name": "shopify-mcp-server",
+    "version": "1.0.0",
+    "description": "MCP server for Shopify API integration",
+    "main": "build/index.js",
+    "bin": {
+        "shopify-mcp-server": "./build/index.js"
+    },
+    "scripts": {
+        "build": "echo 'No build needed for web-only mode'",
+        "dev": "node web-app.js",
+        "start": "node web-app.js",
+        "mcp": "echo 'MCP server disabled - use web interface'",
+        "postinstall": "echo 'Ready to start'"
+    },
+    "engines": {
+        "node": ">=18.0.0",
+        "npm": ">=8.0.0"
+    },
+    "keywords": [
+        "mcp",
+        "shopify",
+        "api",
+        "server"
+    ],
+    "dependencies": {
+        "axios": "^1.11.0",
+        "cors": "^2.8.5",
+        "express": "^4.21.2",
+        "uuid": "^11.1.0"
+    }
+}
