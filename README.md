@@ -1,121 +1,82 @@
-# Shopify MCP Server
+# 🚀 MCP Shopify Server
 
-Professional MCP (Model Context Protocol) server for Shopify API integration with multi-interface web application.
+מערכת מתקדמת לניהול חנויות Shopify עם פרוטוקול MCP לאינטגרציה עם Claude AI.
 
-## 🚀 Quick Start
+## ✨ תכונות עיקריות
 
-1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+- 🛍️ **ממשק ChatShop** - קנייה חכמה עם AI
+- 📊 **Dashboard מקצועי** - ניהול חנות מתקדם  
+- ✈️ **מערכת טיסות** - אינטגרציה עם API טיסות
+- 🔌 **MCP Protocol** - חיבור ישיר ל-Claude Desktop
+- 🏪 **רב-חנויות** - תמיכה במספר חנויות Shopify
 
-2. **Configure Shopify credentials**:
-   - Visit `/config` after starting the server to enter your Shopify store credentials through the web interface
-   - Or set environment variables:
-     ```bash
-     SHOPIFY_STORE_URL=https://your-store.myshopify.com
-     SHOPIFY_ACCESS_TOKEN=shpat_your_access_token_here
-     ```
+## 🏗️ פריסה ב-Render
 
-3. **Run the application**:
-   ```bash
-   npm run dev
-   ```
+### שלב 1: חיבור Repository
+1. Fork את הפרויקט מגיטהאב
+2. היכנס ל-[Render.com](https://render.com)
+3. לחץ "New" → "Web Service"
+4. חבר את הGitHub repository
 
-4. **Access the interfaces**:
-   - Main interface: `http://localhost:3001/`
-   - Configuration: `http://localhost:3001/config`
-   - Shop interface: `http://localhost:3001/shop`
-   - Dashboard: `http://localhost:3001/dashboard`
+### שלב 2: הגדרות Deploy
+```
+Name: mcp-shopify-server
+Environment: Docker
+Region: Oregon (או הקרוב ביותר)
+Plan: Free
+```
 
-## 🛠 Features
+### שלב 3: משתני סביבה
+הוסף ב-Render Dashboard:
+```env
+SHOPIFY_STORE_URL=https://your-dev-store.myshopify.com
+SHOPIFY_ACCESS_TOKEN=shpat_your_token_here
+NODE_ENV=production
+```
 
-### MCP Tools (8 available)
-- `search_products` - Search products by query
-- `get_product_details` - Get detailed product information
-- `list_products` - List all products
-- `create_order` - Create new orders
-- `list_orders` - List store orders
-- `compare_products` - Compare products and analyze prices
-- `find_best_deals` - Find best deals across products
-- `search_by_vendor` - Search products by vendor/brand
+### שלב 4: Deploy
+Render יבנה וירים את השירות אוטומטית (3-5 דקות).
 
-### Web Interfaces
-- **Configuration Interface** (`/config`) - Set up Shopify credentials securely
-- **Shop Interface** (`/shop`) - Customer-facing shopping experience
-- **Dashboard** (`/dashboard`) - Admin and analytics dashboard
-- **Health Check** (`/health`) - System status monitoring
+## 🛠️ יצירת Shopify Development Store
 
-## 🔧 Configuration
+1. עבור ל-[Shopify Partners](https://partners.shopify.com)
+2. צור חשבון Partner (חינם)
+3. צור Development Store חדשה
+4. צור Private App עם הרשאות:
+   - read_products, write_products
+   - read_orders, write_orders  
+   - read_customers, write_customers
+5. העתק את Access Token (מתחיל ב-shpat_)
 
-### Option 1: Web Interface (Recommended)
-1. Start the server: `npm run dev`
-2. Visit `http://localhost:3001/config`
-3. Enter your Shopify store URL and access token
-4. Test the connection and save
+## 🌐 ממשקים זמינים
 
-### Option 2: Environment Variables
-Create a `.env` file from `.env.example`:
+לאחר פריסה: `https://your-app.onrender.com`
+
+- **🏠 Home:** `/`
+- **📊 Dashboard:** `/dashboard` 
+- **🛍️ ChatShop:** `/shop`
+- **💬 Chat:** `/chat`
+- **✈️ Flights:** `/flights`
+- **🏥 Health:** `/health`
+
+## 🔧 פיתוח מקומי
+
 ```bash
+git clone https://github.com/Arviv123/shopify.git
+cd shopify
+npm install
 cp .env.example .env
+# ערוך .env עם פרטי החנות
+npm run build
+npm start
 ```
 
-Edit `.env` with your credentials:
-```
-SHOPIFY_STORE_URL=https://your-store.myshopify.com
-SHOPIFY_ACCESS_TOKEN=shpat_your_access_token_here
-PORT=3001
-```
+## 📊 פתרון בעיות
 
-## 🚀 Deployment
+- **401 Unauthorized:** בדוק Access Token
+- **Unavailable Shop:** צור חנות Development חדשה
+- **Build שגיאות:** וודא שכל קבצים ב-Git
 
-### Render.com
-1. Connect your GitHub repository
-2. Set environment variables in Render dashboard:
-   - `SHOPIFY_STORE_URL`
-   - `SHOPIFY_ACCESS_TOKEN`
-3. Deploy automatically
+---
 
-### Docker
-```bash
-docker build -t shopify-mcp-server .
-docker run -p 8080:8080 -e SHOPIFY_STORE_URL=your_url -e SHOPIFY_ACCESS_TOKEN=your_token shopify-mcp-server
-```
-
-## 📋 Scripts
-
-- `npm run build` - Compile TypeScript
-- `npm run dev` - Development mode with auto-restart
-- `npm start` - Production mode
-- `npm run mcp` - Run MCP server only
-
-## 🔐 Security
-
-- No hardcoded credentials in the codebase
-- Runtime configuration through secure web interface
-- Environment variable support for production
-- Input validation and error handling
-
-## 📚 API Documentation
-
-The server provides REST APIs at:
-- `POST /api/chat/search` - Product search
-- `POST /api/order/create` - Order creation
-- `GET /api/config` - Configuration status
-- `POST /api/config/test` - Test Shopify connection
-- `POST /api/config/save` - Save configuration
-
-## 🧪 Testing
-
-Visit `/health` for system status and `/health/detailed` for comprehensive health information.
-
-## 📦 Requirements
-
-- Node.js >= 18.0.0
-- npm >= 8.0.0
-- Valid Shopify store with Admin API access
-- Shopify private app or custom app with required permissions
-
-## 🆘 Support
-
-For issues and feature requests, please check the troubleshooting guide or contact support.
+**🎉 מוכן לשימוש עם Claude AI ו-MCP Protocol!**
