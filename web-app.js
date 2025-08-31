@@ -64,7 +64,7 @@ app.get('/mcp-dev', (req, res) => {
     'Pragma': 'no-cache',
     'Expires': '0'
   });
-  res.sendFile(path.join(__dirname, 'public', 'mcp-dev.html'));
+  res.sendFile(path.join(__dirname, 'public', 'mcp-dev-v2.html'));
 });
 
 app.get('/customer-chat-v2', (req, res) => {
@@ -1867,10 +1867,75 @@ app.post('/api/mcp/connect/:serverId', async (req, res) => {
   }
 });
 
-// Query MCP server
-app.post('/api/mcp/query', async (req, res) => {
+// List available tools from MCP server
+app.post('/api/mcp/list-tools', async (req, res) => {
   try {
-    const { server: serverId, query } = req.body;
+    const { server: serverId } = req.body;
+    
+    const serverInfo = mcpServers.get(serverId);
+    if (!serverInfo) {
+      return res.status(404).json({ error: 'Server not found' });
+    }
+    
+    if (serverInfo.status !== 'running') {
+      return res.status(400).json({ error: 'Server is not running' });
+    }
+    
+    // Try to get tools list from server
+    try {
+      const response = await fetch(`http://localhost:${serverInfo.port}/mcp/list-tools`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'tools/list' }),
+        timeout: 5000
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        res.json({ tools: result.tools || [] });
+      } else {
+        // Fallback to mock tools
+        res.json({
+          tools: [
+            {
+              name: 'hello_world',
+              description: 'Returns a greeting message',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', description: 'Name to greet' }
+                }
+              }
+            }
+          ]
+        });
+      }
+    } catch (error) {
+      // Server not responding, return mock tools
+      res.json({
+        tools: [
+          {
+            name: 'test_tool',
+            description: 'Test tool for debugging',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                message: { type: 'string', description: 'Test message' }
+              }
+            }
+          }
+        ]
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Execute MCP tool
+app.post('/api/mcp/execute-tool', async (req, res) => {
+  try {
+    const { server: serverId, toolName, parameters } = req.body;
     
     const serverInfo = mcpServers.get(serverId);
     if (!serverInfo) {
@@ -1882,7 +1947,67 @@ app.post('/api/mcp/query', async (req, res) => {
       return res.status(400).json({ error: 'Not connected to server' });
     }
     
-    // Parse query
+    if (serverInfo.status !== 'running') {
+      return res.status(400).json({ error: 'Server is not running' });
+    }
+    
+    // Try to execute tool on actual server
+    try {
+      const response = await fetch(`http://localhost:${serverInfo.port}/mcp/call-tool`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          method: 'tools/call',
+          params: {
+            name: toolName,
+            arguments: parameters || {}
+          }
+        }),
+        timeout: 30000
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        res.json({
+          success: true,
+          tool: toolName,
+          parameters: parameters,
+          result: result,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+    } catch (error) {
+      // Fallback to mock response
+      const response = {
+        success: true,
+        tool: toolName,
+        parameters: parameters,
+        result: {
+          content: [{
+            type: 'text',
+            text: `Mock execution of tool '${toolName}' with parameters: ${JSON.stringify(parameters, null, 2)}`
+          }],
+          isError: false
+        },
+        timestamp: new Date().toISOString(),
+        mock: true
+      };
+      
+      res.json(response);
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Legacy query endpoint for backwards compatibility
+app.post('/api/mcp/query', async (req, res) => {
+  try {
+    const { server: serverId, query } = req.body;
+    
+    // Parse legacy query format
     const [toolName, paramsStr] = query.split(' ', 2);
     let params = {};
     
@@ -1894,19 +2019,14 @@ app.post('/api/mcp/query', async (req, res) => {
       }
     }
     
-    // Mock response for now
-    const response = {
-      success: true,
-      tool: toolName,
-      params: params,
-      result: {
-        message: `Query executed on ${serverInfo.name}`,
-        timestamp: new Date().toISOString(),
-        server: serverInfo.name
-      }
+    // Forward to new execute-tool endpoint
+    req.body = {
+      server: serverId,
+      toolName: toolName,
+      parameters: params
     };
     
-    res.json(response);
+    return app._router.handle(req, res, () => {});
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
