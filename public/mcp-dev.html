@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Development Interface - פיתוח שרתי MCP</title>
+    <link rel="stylesheet" href="/styles/main.css">
+    <style>
+        .dev-interface {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .upload-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .code-editor {
+            width: 100%;
+            height: 400px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            background: #f8f9fa;
+        }
+        
+        .server-list {
+            display: grid;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .server-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #007bff;
+        }
+        
+        .server-status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status-running { background: #d4edda; color: #155724; }
+        .status-stopped { background: #f8d7da; color: #721c24; }
+        .status-building { background: #fff3cd; color: #856404; }
+        
+        .dependencies-section {
+            background: #f8f9fa;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        
+        .log-output {
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .client-section {
+            background: #e8f5e8;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        .btn:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #1e7e34; }
+    </style>
+</head>
+<body>
+    <div class="dev-interface">
+        <h1>🛠️ MCP Development Interface</h1>
+        <p>פתח, העלה והרץ שרתי MCP מותאמים אישית</p>
+        
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <h2>📤 העלאת שרת MCP חדש</h2>
+            
+            <div class="form-group">
+                <label>שם השרת:</label>
+                <input type="text" id="serverName" placeholder="my-mcp-server" class="form-control">
+            </div>
+            
+            <div class="form-group">
+                <label>קוד השרת (JavaScript/TypeScript):</label>
+                <textarea id="serverCode" class="code-editor" placeholder="// כתוב כאן את קוד שרת ה-MCP שלך
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+
+const server = new Server({
+  name: 'my-custom-server',
+  version: '1.0.0'
+});
+
+// הוסף כאן את הכלים שלך...
+
+// הפעלת השרת
+const transport = new StdioServerTransport();
+server.connect(transport);
+"></textarea>
+            </div>
+            
+            <div class="dependencies-section">
+                <h3>תלויות (Dependencies)</h3>
+                <textarea id="dependencies" placeholder="@modelcontextprotocol/sdk
+axios
+express" rows="4" class="form-control"></textarea>
+                <small>רשום כל תלות בשורה נפרדת</small>
+            </div>
+            
+            <div class="form-group">
+                <label>package.json נוסף (אופציונלי):</label>
+                <textarea id="packageJson" class="form-control" rows="6" placeholder='{
+  "name": "my-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js"
+}'></textarea>
+            </div>
+            
+            <button onclick="uploadServer()" class="btn">📤 העלה והרץ שרת</button>
+        </div>
+        
+        <!-- Server List -->
+        <div class="upload-section">
+            <h2>📋 שרתים פעילים</h2>
+            <div id="serverList" class="server-list">
+                <div class="server-card">
+                    <h3>shopify-mcp-server <span class="server-status status-running">פעיל</span></h3>
+                    <p>השרת הבסיסי של שופיפי - 13 כלים זמינים</p>
+                    <button class="btn btn-success" onclick="connectToServer('shopify-mcp-server')">🔌 התחבר</button>
+                    <button class="btn" onclick="viewLogs('shopify-mcp-server')">📋 לוגים</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MCP Client Section -->
+        <div class="client-section">
+            <h2>🤖 MCP Client - ממשק לקוח</h2>
+            <div class="form-group">
+                <label>שרת מחובר:</label>
+                <select id="connectedServer" class="form-control">
+                    <option value="">בחר שרת...</option>
+                    <option value="shopify-mcp-server">shopify-mcp-server</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>שאילתה לשרת:</label>
+                <textarea id="mcpQuery" class="form-control" rows="3" placeholder="search_products {'query': 'shoes'}"></textarea>
+                <button onclick="sendMcpQuery()" class="btn">📤 שלח</button>
+            </div>
+            
+            <div class="log-output" id="mcpResponse">
+אין תגובה עדיין...
+            </div>
+        </div>
+        
+        <!-- Logs Section -->
+        <div id="logsSection" class="upload-section" style="display: none;">
+            <h2>📋 לוגי שרת</h2>
+            <div class="log-output" id="serverLogs">
+                <div id="logsContent">אין לוגים זמינים...</div>
+            </div>
+            <button onclick="closeLogs()" class="btn">✖️ סגור</button>
+        </div>
+    </div>
+
+    <script>
+        let serverList = [];
+        let connectedServer = null;
+        
+        async function uploadServer() {
+            const name = document.getElementById('serverName').value;
+            const code = document.getElementById('serverCode').value;
+            const deps = document.getElementById('dependencies').value;
+            const packageJson = document.getElementById('packageJson').value;
+            
+            if (!name || !code) {
+                alert('נא למלא שם שרת וקוד');
+                return;
+            }
+            
+            const serverData = {
+                name: name,
+                code: code,
+                dependencies: deps.split('\n').filter(d => d.trim()),
+                packageJson: packageJson || null
+            };
+            
+            try {
+                const response = await fetch('/api/mcp/upload-server', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(serverData)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('השרת הועלה בהצלחה!');
+                    loadServerList();
+                    clearForm();
+                } else {
+                    alert('שגיאה: ' + result.error);
+                }
+            } catch (error) {
+                alert('שגיאה בהעלאה: ' + error.message);
+            }
+        }
+        
+        async function loadServerList() {
+            try {
+                const response = await fetch('/api/mcp/servers');
+                const servers = await response.json();
+                
+                const listEl = document.getElementById('serverList');
+                const selectEl = document.getElementById('connectedServer');
+                
+                listEl.innerHTML = '';
+                selectEl.innerHTML = '<option value="">בחר שרת...</option>';
+                
+                servers.forEach(server => {
+                    // Server card
+                    const card = document.createElement('div');
+                    card.className = 'server-card';
+                    card.innerHTML = `
+                        <h3>${server.name} <span class="server-status status-${server.status}">${getStatusText(server.status)}</span></h3>
+                        <p>${server.description || 'אין תיאור'}</p>
+                        <p><strong>פורט:</strong> ${server.port || 'N/A'} | <strong>זמן יצירה:</strong> ${server.created}</p>
+                        <button class="btn btn-success" onclick="connectToServer('${server.name}')" ${server.status !== 'running' ? 'disabled' : ''}>🔌 התחבר</button>
+                        <button class="btn" onclick="viewLogs('${server.name}')">📋 לוגים</button>
+                        <button class="btn btn-danger" onclick="stopServer('${server.name}')">⏹️ עצור</button>
+                        <button class="btn" onclick="restartServer('${server.name}')">🔄 הפעל מחדש</button>
+                    `;
+                    listEl.appendChild(card);
+                    
+                    // Select option
+                    if (server.status === 'running') {
+                        const option = document.createElement('option');
+                        option.value = server.name;
+                        option.textContent = server.name;
+                        selectEl.appendChild(option);
+                    }
+                });
+            } catch (error) {
+                console.error('שגיאה בטעינת רשימת שרתים:', error);
+            }
+        }
+        
+        function getStatusText(status) {
+            const statusMap = {
+                'running': 'פעיל',
+                'stopped': 'מעוצר',
+                'building': 'בונה...',
+                'error': 'שגיאה'
+            };
+            return statusMap[status] || status;
+        }
+        
+        async function connectToServer(serverName) {
+            try {
+                const response = await fetch(`/api/mcp/connect/${serverName}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    connectedServer = serverName;
+                    document.getElementById('connectedServer').value = serverName;
+                    document.getElementById('mcpResponse').textContent = `מחובר לשרת ${serverName} בהצלחה!`;
+                } else {
+                    alert('שגיאה בחיבור: ' + result.error);
+                }
+            } catch (error) {
+                alert('שגיאה בחיבור: ' + error.message);
+            }
+        }
+        
+        async function sendMcpQuery() {
+            const server = document.getElementById('connectedServer').value;
+            const query = document.getElementById('mcpQuery').value;
+            
+            if (!server || !query) {
+                alert('נא לבחור שרת ולכתוב שאילתה');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/mcp/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ server, query })
+                });
+                
+                const result = await response.json();
+                document.getElementById('mcpResponse').textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+                document.getElementById('mcpResponse').textContent = 'שגיאה: ' + error.message;
+            }
+        }
+        
+        async function viewLogs(serverName) {
+            try {
+                const response = await fetch(`/api/mcp/logs/${serverName}`);
+                const logs = await response.json();
+                
+                document.getElementById('logsContent').textContent = logs.logs || 'אין לוגים זמינים';
+                document.getElementById('logsSection').style.display = 'block';
+            } catch (error) {
+                alert('שגיאה בטעינת לוגים: ' + error.message);
+            }
+        }
+        
+        function closeLogs() {
+            document.getElementById('logsSection').style.display = 'none';
+        }
+        
+        async function stopServer(serverName) {
+            if (confirm(`האם אתה בטוח שרוצה לעצור את השרת ${serverName}?`)) {
+                try {
+                    const response = await fetch(`/api/mcp/stop/${serverName}`, {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        loadServerList();
+                    } else {
+                        alert('שגיאה בעצירת השרת: ' + result.error);
+                    }
+                } catch (error) {
+                    alert('שגיאה: ' + error.message);
+                }
+            }
+        }
+        
+        async function restartServer(serverName) {
+            try {
+                const response = await fetch(`/api/mcp/restart/${serverName}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    loadServerList();
+                } else {
+                    alert('שגיאה בהפעלה מחדש: ' + result.error);
+                }
+            } catch (error) {
+                alert('שגיאה: ' + error.message);
+            }
+        }
+        
+        function clearForm() {
+            document.getElementById('serverName').value = '';
+            document.getElementById('serverCode').value = '';
+            document.getElementById('dependencies').value = '';
+            document.getElementById('packageJson').value = '';
+        }
+        
+        // Load server list on page load
+        document.addEventListener('DOMContentLoaded', loadServerList);
+        
+        // Auto-refresh server list every 10 seconds
+        setInterval(loadServerList, 10000);
+    </script>
+</body>
+</html>

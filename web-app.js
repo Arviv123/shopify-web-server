@@ -8,9 +8,16 @@ import { ShopifyClient } from './build/shopify-client.js';
 import { FlightAPI } from './build/flight-api.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// MCP Development Management
+const mcpServers = new Map();
+const mcpClients = new Map();
+let nextMcpPort = 9000;
 
 const app = express();
 // Render דורש שימוש בprocess.env.PORT ללא ברירת מחדל קבועה
@@ -48,6 +55,16 @@ app.get('/customer-chat', (req, res) => {
     'Expires': '0'
   });
   res.sendFile(path.join(__dirname, 'public', 'customer-chat-v2.html'));
+});
+
+// MCP Development Interface
+app.get('/mcp-dev', (req, res) => {
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+  });
+  res.sendFile(path.join(__dirname, 'public', 'mcp-dev.html'));
 });
 
 app.get('/customer-chat-v2', (req, res) => {
@@ -1734,6 +1751,295 @@ app.post('/api/compare-products', async (req, res) => {
   }
 });
 
+// ===== MCP DEVELOPMENT API =====
+
+// Upload and run new MCP server
+app.post('/api/mcp/upload-server', async (req, res) => {
+  try {
+    const { name, code, dependencies, packageJson } = req.body;
+    
+    if (!name || !code) {
+      return res.status(400).json({ success: false, error: 'Name and code are required' });
+    }
+    
+    const serverId = uuidv4();
+    const serverInfo = {
+      id: serverId,
+      name: name,
+      status: 'building',
+      port: nextMcpPort++,
+      created: new Date().toISOString(),
+      code: code,
+      dependencies: dependencies || [],
+      packageJson: packageJson,
+      logs: [],
+      description: `Custom MCP Server: ${name}`
+    };
+    
+    mcpServers.set(serverId, serverInfo);
+    
+    // Create server directory
+    const serverDir = path.join(__dirname, 'mcp-servers', serverId);
+    if (!fs.existsSync(serverDir)) {
+      fs.mkdirSync(serverDir, { recursive: true });
+    }
+    
+    // Write server files
+    fs.writeFileSync(path.join(serverDir, 'index.js'), code);
+    
+    // Create package.json
+    const pkg = packageJson ? JSON.parse(packageJson) : {
+      name: name,
+      version: '1.0.0',
+      type: 'module',
+      main: 'index.js',
+      dependencies: {}
+    };
+    
+    // Add dependencies
+    if (dependencies && dependencies.length > 0) {
+      dependencies.forEach(dep => {
+        const [depName, version] = dep.split('@');
+        pkg.dependencies[depName] = version || 'latest';
+      });
+    }
+    
+    fs.writeFileSync(path.join(serverDir, 'package.json'), JSON.stringify(pkg, null, 2));
+    
+    // Create Dockerfile
+    const dockerfile = `
+FROM node:20-alpine
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+COPY index.js ./
+EXPOSE ${serverInfo.port}
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
+  CMD node -e "console.log('healthy')" || exit 1
+CMD ["node", "index.js"]
+`.trim();
+    
+    fs.writeFileSync(path.join(serverDir, 'Dockerfile'), dockerfile);
+    
+    // Build and run server
+    buildAndRunMcpServer(serverId, serverDir);
+    
+    res.json({ success: true, serverId: serverId });
+  } catch (error) {
+    console.error('Error uploading server:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all MCP servers
+app.get('/api/mcp/servers', (req, res) => {
+  const servers = Array.from(mcpServers.values()).map(server => ({
+    ...server,
+    logs: server.logs.slice(-50)
+  }));
+  res.json(servers);
+});
+
+// Connect to MCP server
+app.post('/api/mcp/connect/:serverId', async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const serverInfo = mcpServers.get(serverId);
+    
+    if (!serverInfo) {
+      return res.status(404).json({ success: false, error: 'Server not found' });
+    }
+    
+    if (serverInfo.status !== 'running') {
+      return res.status(400).json({ success: false, error: 'Server is not running' });
+    }
+    
+    // Create client connection
+    mcpClients.set(serverId, {
+      serverId: serverId,
+      connected: true,
+      lastPing: Date.now()
+    });
+    
+    res.json({ success: true, message: `Connected to ${serverInfo.name}` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Query MCP server
+app.post('/api/mcp/query', async (req, res) => {
+  try {
+    const { server: serverId, query } = req.body;
+    
+    const serverInfo = mcpServers.get(serverId);
+    if (!serverInfo) {
+      return res.status(404).json({ error: 'Server not found' });
+    }
+    
+    const client = mcpClients.get(serverId);
+    if (!client) {
+      return res.status(400).json({ error: 'Not connected to server' });
+    }
+    
+    // Parse query
+    const [toolName, paramsStr] = query.split(' ', 2);
+    let params = {};
+    
+    if (paramsStr) {
+      try {
+        params = JSON.parse(paramsStr.replace(/'/g, '"'));
+      } catch {
+        params = { query: paramsStr };
+      }
+    }
+    
+    // Mock response for now
+    const response = {
+      success: true,
+      tool: toolName,
+      params: params,
+      result: {
+        message: `Query executed on ${serverInfo.name}`,
+        timestamp: new Date().toISOString(),
+        server: serverInfo.name
+      }
+    };
+    
+    res.json(response);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get server logs
+app.get('/api/mcp/logs/:serverId', (req, res) => {
+  const { serverId } = req.params;
+  const serverInfo = mcpServers.get(serverId);
+  
+  if (!serverInfo) {
+    return res.status(404).json({ logs: '', error: 'Server not found' });
+  }
+  
+  res.json({ logs: serverInfo.logs.join('\n') });
+});
+
+// Stop MCP server
+app.post('/api/mcp/stop/:serverId', async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const serverInfo = mcpServers.get(serverId);
+    
+    if (!serverInfo) {
+      return res.status(404).json({ success: false, error: 'Server not found' });
+    }
+    
+    if (serverInfo.containerId) {
+      const stopProcess = spawn('docker', ['stop', serverInfo.containerId]);
+      
+      stopProcess.on('close', (code) => {
+        serverInfo.status = 'stopped';
+        serverInfo.containerId = undefined;
+        serverInfo.logs.push(`[STOP] Container stopped at ${new Date().toISOString()}`);
+        mcpServers.set(serverId, serverInfo);
+      });
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Restart MCP server
+app.post('/api/mcp/restart/:serverId', async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const serverInfo = mcpServers.get(serverId);
+    
+    if (!serverInfo) {
+      return res.status(404).json({ success: false, error: 'Server not found' });
+    }
+    
+    // Stop first
+    if (serverInfo.containerId) {
+      const stopProcess = spawn('docker', ['stop', serverInfo.containerId]);
+      stopProcess.on('close', () => {
+        // Then restart
+        const serverDir = path.join(__dirname, 'mcp-servers', serverId);
+        buildAndRunMcpServer(serverId, serverDir);
+      });
+    } else {
+      const serverDir = path.join(__dirname, 'mcp-servers', serverId);
+      buildAndRunMcpServer(serverId, serverDir);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Build and run MCP server function
+function buildAndRunMcpServer(serverId, serverDir) {
+  const serverInfo = mcpServers.get(serverId);
+  if (!serverInfo) return;
+  
+  serverInfo.status = 'building';
+  serverInfo.logs.push(`[BUILD] Starting build process at ${new Date().toISOString()}`);
+  
+  // Build Docker image
+  const buildProcess = spawn('docker', ['build', '-t', `mcp-server-${serverId}`, '.'], {
+    cwd: serverDir,
+    stdio: 'pipe'
+  });
+  
+  buildProcess.stdout?.on('data', (data) => {
+    const log = `[BUILD] ${data.toString().trim()}`;
+    serverInfo.logs.push(log);
+  });
+  
+  buildProcess.stderr?.on('data', (data) => {
+    const log = `[BUILD ERROR] ${data.toString().trim()}`;
+    serverInfo.logs.push(log);
+  });
+  
+  buildProcess.on('close', (code) => {
+    if (code === 0) {
+      serverInfo.logs.push('[BUILD] Docker image built successfully');
+      
+      // Run container
+      const runProcess = spawn('docker', [
+        'run', '--rm', '-d',
+        '-p', `${serverInfo.port}:${serverInfo.port}`,
+        '--name', `mcp-server-${serverId}`,
+        `mcp-server-${serverId}`
+      ]);
+      
+      runProcess.stdout?.on('data', (data) => {
+        const containerId = data.toString().trim();
+        serverInfo.containerId = containerId;
+        serverInfo.status = 'running';
+        serverInfo.logs.push(`[RUN] Container started with ID: ${containerId}`);
+        mcpServers.set(serverId, serverInfo);
+      });
+      
+      runProcess.on('close', (runCode) => {
+        if (runCode !== 0) {
+          serverInfo.status = 'error';
+          serverInfo.logs.push(`[RUN ERROR] Failed to start container with code ${runCode}`);
+        }
+      });
+      
+    } else {
+      serverInfo.status = 'error';
+      serverInfo.logs.push(`[BUILD ERROR] Build failed with code ${code}`);
+    }
+    
+    mcpServers.set(serverId, serverInfo);
+  });
+}
+
 // Health check endpoint (required by Render)
 app.get('/health', (req, res) => {
   res.status(200).send('ok');
@@ -1768,6 +2074,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 Dashboard: /dashboard`);
   console.log(`💬 Chat: /chat`);
   console.log(`🛍️ Shop: /shop`);
+  console.log(`🛠️ MCP Dev: /mcp-dev`);
   console.log(`🏥 Health: /health`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
