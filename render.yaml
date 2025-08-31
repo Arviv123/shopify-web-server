@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: shopify-mcp-server
+    env: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health
+    numInstances: 1
+    maxMemoryGB: 0.5
+    cpuCount: 0.25
+    region: oregon
+    autoDeploy: true
+    buildFilter:
+      paths:
+      - src/**
+      - public/**
+      - package.json
+      - package-lock.json
+      - tsconfig.json
+      - web-app.js
+      ignoredPaths:
+      - README.md
+      - docs/**
+      - "*.md"
